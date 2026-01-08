@@ -1,6 +1,6 @@
 import tkinter as tk
 from tkinter import messagebox, ttk
-import json
+import sqlite3
 import os
 import re
 
@@ -11,9 +11,9 @@ class App:
         self.root.geometry("400x300")
         self.root.resizable(False, False)
         
-        # Carregar usuários
-        self.users_file = "users.json"
-        self.users = self.load_users()
+        # Inicializar banco de dados
+        self.db_file = "users.db"
+        self.init_database()
         
         # Container principal que vai conter os frames de login e cadastro
         self.container = ttk.Frame(root)
@@ -54,20 +54,81 @@ class App:
         self.cadastro_frame.mostrar()
         self.center_window()
     
-    def load_users(self):
-        """Carrega usuários do arquivo JSON"""
-        if os.path.exists(self.users_file):
-            try:
-                with open(self.users_file, 'r', encoding='utf-8') as f:
-                    return json.load(f)
-            except:
-                return {}
-        return {}
+    def init_database(self):
+        """Inicializa o banco de dados SQLite e cria a tabela se não existir"""
+        conn = sqlite3.connect(self.db_file)
+        cursor = conn.cursor()
+        
+        # Criar tabela de usuários se não existir
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS usuarios (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                nome TEXT NOT NULL,
+                email TEXT UNIQUE NOT NULL,
+                senha TEXT NOT NULL
+            )
+        ''')
+        
+        conn.commit()
+        
+        # Criar usuário administrador padrão se não existir
+        cursor.execute('SELECT email FROM usuarios WHERE email = ?', ('admin',))
+        if cursor.fetchone() is None:
+            cursor.execute('''
+                INSERT INTO usuarios (nome, email, senha)
+                VALUES (?, ?, ?)
+            ''', ('Administrador', 'admin', 'admin'))
+            conn.commit()
+        
+        conn.close()
     
-    def save_users(self):
-        """Salva usuários no arquivo JSON"""
-        with open(self.users_file, 'w', encoding='utf-8') as f:
-            json.dump(self.users, f, indent=4, ensure_ascii=False)
+    def get_connection(self):
+        """Retorna uma conexão com o banco de dados"""
+        return sqlite3.connect(self.db_file)
+    
+    def verificar_usuario(self, email, senha):
+        """Verifica se o email e senha correspondem a um usuário"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT nome, email, senha FROM usuarios 
+            WHERE email = ? AND senha = ?
+        ''', (email, senha))
+        
+        resultado = cursor.fetchone()
+        conn.close()
+        
+        return resultado
+    
+    def usuario_existe(self, email):
+        """Verifica se um email já está cadastrado"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT email FROM usuarios WHERE email = ?', (email,))
+        resultado = cursor.fetchone()
+        conn.close()
+        
+        return resultado is not None
+    
+    def cadastrar_usuario(self, nome, email, senha):
+        """Cadastra um novo usuário no banco de dados"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('''
+                INSERT INTO usuarios (nome, email, senha)
+                VALUES (?, ?, ?)
+            ''', (nome, email, senha))
+            
+            conn.commit()
+            conn.close()
+            return True
+        except sqlite3.IntegrityError:
+            conn.close()
+            return False
 
 
 class LoginScreen:
@@ -167,28 +228,13 @@ class LoginScreen:
             self.senha_entry.focus()
             return
         
-        # Verificar credenciais (email como login)
-        if login in self.app.users:
-            user_data = self.app.users[login]
-            if isinstance(user_data, dict):
-                # Nova estrutura: {"nome": "...", "email": "...", "senha": "..."}
-                if user_data.get("senha") == senha:
-                    nome = user_data.get("nome", login)
-                    messagebox.showinfo("Sucesso", f"Bem-vindo, {nome}!")
-                    self.clear_fields()
-                else:
-                    messagebox.showerror("Erro", "Email ou senha incorretos!")
-                    self.senha_entry.delete(0, tk.END)
-                    self.senha_entry.focus()
-            else:
-                # Estrutura antiga: compatibilidade
-                if user_data == senha:
-                    messagebox.showinfo("Sucesso", f"Bem-vindo, {login}!")
-                    self.clear_fields()
-                else:
-                    messagebox.showerror("Erro", "Email ou senha incorretos!")
-                    self.senha_entry.delete(0, tk.END)
-                    self.senha_entry.focus()
+        # Verificar credenciais no banco de dados
+        resultado = self.app.verificar_usuario(login, senha)
+        
+        if resultado:
+            nome = resultado[0]
+            messagebox.showinfo("Sucesso", f"Bem-vindo, {nome}!")
+            self.clear_fields()
         else:
             messagebox.showerror("Erro", "Email ou senha incorretos!")
             self.senha_entry.delete(0, tk.END)
@@ -329,20 +375,17 @@ class CadastroScreen:
             return
         
         # Verificar se email já está cadastrado
-        if email in self.app.users:
+        if self.app.usuario_existe(email):
             messagebox.showerror("Erro", "Este email já está cadastrado!")
             self.email_entry.focus()
             return
         
-        # Cadastrar novo usuário
-        self.app.users[email] = {
-            "nome": nome,
-            "email": email,
-            "senha": senha
-        }
-        self.app.save_users()
-        messagebox.showinfo("Sucesso", "Usuário cadastrado com sucesso!")
-        self.voltar()
+        # Cadastrar novo usuário no banco de dados
+        if self.app.cadastrar_usuario(nome, email, senha):
+            messagebox.showinfo("Sucesso", "Usuário cadastrado com sucesso!")
+            self.voltar()
+        else:
+            messagebox.showerror("Erro", "Erro ao cadastrar usuário. Tente novamente.")
     
     def voltar(self):
         """Volta para a tela de login"""
