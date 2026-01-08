@@ -2,82 +2,32 @@ import tkinter as tk
 from tkinter import messagebox, ttk
 import json
 import os
+import re
 
-class LoginScreen:
+class App:
     def __init__(self, root):
         self.root = root
         self.root.title("Tela de Login")
         self.root.geometry("400x300")
         self.root.resizable(False, False)
         
-        # Centralizar janela
-        self.center_window()
-        
         # Carregar usuários
         self.users_file = "users.json"
         self.users = self.load_users()
         
-        # Frame principal
-        main_frame = ttk.Frame(root, padding="20")
-        main_frame.pack(fill=tk.BOTH, expand=True)
+        # Container principal que vai conter os frames de login e cadastro
+        self.container = ttk.Frame(root)
+        self.container.pack(fill=tk.BOTH, expand=True)
         
-        # Título
-        title_label = ttk.Label(
-            main_frame, 
-            text="Sistema de Login", 
-            font=("Arial", 18, "bold")
-        )
-        title_label.pack(pady=(0, 30))
+        # Criar frames de login e cadastro
+        self.login_frame = LoginScreen(self.container, self)
+        self.cadastro_frame = CadastroScreen(self.container, self)
         
-        # Frame para campos de entrada
-        entry_frame = ttk.Frame(main_frame)
-        entry_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 20))
+        # Mostrar inicialmente a tela de login
+        self.mostrar_login()
         
-        # Campo de Login
-        login_label = ttk.Label(entry_frame, text="Login:", font=("Arial", 10))
-        login_label.grid(row=0, column=0, sticky=tk.W, pady=(0, 10))
-        
-        self.login_entry = ttk.Entry(entry_frame, font=("Arial", 11), width=30)
-        self.login_entry.grid(row=1, column=0, pady=(0, 15))
-        self.login_entry.focus()
-        
-        # Campo de Senha
-        senha_label = ttk.Label(entry_frame, text="Senha:", font=("Arial", 10))
-        senha_label.grid(row=2, column=0, sticky=tk.W, pady=(0, 10))
-        
-        self.senha_entry = ttk.Entry(
-            entry_frame, 
-            font=("Arial", 11), 
-            width=30, 
-            show="*"
-        )
-        self.senha_entry.grid(row=3, column=0, pady=(0, 20))
-        
-        # Bind Enter key
-        self.login_entry.bind("<Return>", lambda e: self.senha_entry.focus())
-        self.senha_entry.bind("<Return>", lambda e: self.entrar())
-        
-        # Frame para botões
-        button_frame = ttk.Frame(main_frame)
-        button_frame.pack(fill=tk.X, pady=(10, 0))
-        
-        # Botão Entrar
-        entrar_btn = ttk.Button(
-            button_frame,
-            text="Entrar",
-            command=self.entrar,
-            width=15
-        )
-        entrar_btn.pack(side=tk.LEFT, padx=(0, 10), expand=True, fill=tk.X)
-        
-        # Botão Cadastrar
-        cadastrar_btn = ttk.Button(
-            button_frame,
-            text="Cadastrar",
-            command=self.cadastrar,
-            width=15
-        )
-        cadastrar_btn.pack(side=tk.LEFT, expand=True, fill=tk.X)
+        # Centralizar janela
+        self.center_window()
     
     def center_window(self):
         """Centraliza a janela na tela"""
@@ -87,6 +37,22 @@ class LoginScreen:
         x = (self.root.winfo_screenwidth() // 2) - (width // 2)
         y = (self.root.winfo_screenheight() // 2) - (height // 2)
         self.root.geometry(f'{width}x{height}+{x}+{y}')
+    
+    def mostrar_login(self):
+        """Mostra a tela de login e esconde a de cadastro"""
+        self.root.title("Tela de Login")
+        self.root.geometry("400x300")
+        self.cadastro_frame.esconder()
+        self.login_frame.mostrar()
+        self.center_window()
+    
+    def mostrar_cadastro(self):
+        """Mostra a tela de cadastro e esconde a de login"""
+        self.root.title("Cadastro de Usuário")
+        self.root.geometry("450x400")
+        self.login_frame.esconder()
+        self.cadastro_frame.mostrar()
+        self.center_window()
     
     def load_users(self):
         """Carrega usuários do arquivo JSON"""
@@ -102,6 +68,89 @@ class LoginScreen:
         """Salva usuários no arquivo JSON"""
         with open(self.users_file, 'w', encoding='utf-8') as f:
             json.dump(self.users, f, indent=4, ensure_ascii=False)
+
+
+class LoginScreen:
+    def __init__(self, parent, app):
+        self.parent = parent
+        self.app = app
+        
+        # Frame principal que ocupa toda a janela
+        self.main_frame = ttk.Frame(parent)
+        
+        # Frame centralizado que contém todo o conteúdo
+        center_frame = ttk.Frame(self.main_frame)
+        center_frame.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
+        
+        # Título
+        title_label = ttk.Label(
+            center_frame, 
+            text="Sistema de Login", 
+            font=("Arial", 18, "bold")
+        )
+        title_label.grid(row=0, column=0, pady=(0, 30))
+        
+        # Frame para campos de entrada
+        entry_frame = ttk.Frame(center_frame)
+        entry_frame.grid(row=1, column=0, pady=(0, 20))
+        
+        # Campo de Login (Email)
+        login_label = ttk.Label(entry_frame, text="Email:", font=("Arial", 10))
+        login_label.grid(row=0, column=0, sticky=tk.W, pady=(0, 5))
+        
+        self.login_entry = ttk.Entry(entry_frame, font=("Arial", 11), width=30)
+        self.login_entry.grid(row=1, column=0, pady=(0, 15))
+        
+        # Campo de Senha
+        senha_label = ttk.Label(entry_frame, text="Senha:", font=("Arial", 10))
+        senha_label.grid(row=2, column=0, sticky=tk.W, pady=(0, 5))
+        
+        self.senha_entry = ttk.Entry(
+            entry_frame, 
+            font=("Arial", 11), 
+            width=30, 
+            show="*"
+        )
+        self.senha_entry.grid(row=3, column=0, pady=(0, 20))
+        
+        # Bind Enter key
+        self.login_entry.bind("<Return>", lambda e: self.senha_entry.focus())
+        self.senha_entry.bind("<Return>", lambda e: self.entrar())
+        
+        # Frame para botões
+        button_frame = ttk.Frame(center_frame)
+        button_frame.grid(row=2, column=0)
+        
+        # Botão Entrar
+        entrar_btn = ttk.Button(
+            button_frame,
+            text="Entrar",
+            command=self.entrar,
+            width=15
+        )
+        entrar_btn.grid(row=0, column=0, padx=(0, 5), sticky=tk.EW)
+        
+        # Botão Cadastrar
+        cadastrar_btn = ttk.Button(
+            button_frame,
+            text="Cadastrar",
+            command=self.abrir_cadastro,
+            width=15
+        )
+        cadastrar_btn.grid(row=0, column=1, sticky=tk.EW)
+        
+        # Configurar colunas para expandir igualmente
+        button_frame.columnconfigure(0, weight=1)
+        button_frame.columnconfigure(1, weight=1)
+    
+    def mostrar(self):
+        """Mostra o frame de login"""
+        self.main_frame.pack(fill=tk.BOTH, expand=True)
+        self.login_entry.focus()
+    
+    def esconder(self):
+        """Esconde o frame de login"""
+        self.main_frame.pack_forget()
     
     def entrar(self):
         """Função do botão Entrar"""
@@ -109,7 +158,7 @@ class LoginScreen:
         senha = self.senha_entry.get()
         
         if not login:
-            messagebox.showwarning("Aviso", "Por favor, digite o login!")
+            messagebox.showwarning("Aviso", "Por favor, digite o email!")
             self.login_entry.focus()
             return
         
@@ -118,41 +167,36 @@ class LoginScreen:
             self.senha_entry.focus()
             return
         
-        # Verificar credenciais
-        if login in self.users and self.users[login] == senha:
-            messagebox.showinfo("Sucesso", f"Bem-vindo, {login}!")
-            self.clear_fields()
+        # Verificar credenciais (email como login)
+        if login in self.app.users:
+            user_data = self.app.users[login]
+            if isinstance(user_data, dict):
+                # Nova estrutura: {"nome": "...", "email": "...", "senha": "..."}
+                if user_data.get("senha") == senha:
+                    nome = user_data.get("nome", login)
+                    messagebox.showinfo("Sucesso", f"Bem-vindo, {nome}!")
+                    self.clear_fields()
+                else:
+                    messagebox.showerror("Erro", "Email ou senha incorretos!")
+                    self.senha_entry.delete(0, tk.END)
+                    self.senha_entry.focus()
+            else:
+                # Estrutura antiga: compatibilidade
+                if user_data == senha:
+                    messagebox.showinfo("Sucesso", f"Bem-vindo, {login}!")
+                    self.clear_fields()
+                else:
+                    messagebox.showerror("Erro", "Email ou senha incorretos!")
+                    self.senha_entry.delete(0, tk.END)
+                    self.senha_entry.focus()
         else:
-            messagebox.showerror("Erro", "Login ou senha incorretos!")
+            messagebox.showerror("Erro", "Email ou senha incorretos!")
             self.senha_entry.delete(0, tk.END)
             self.senha_entry.focus()
     
-    def cadastrar(self):
-        """Função do botão Cadastrar"""
-        login = self.login_entry.get().strip()
-        senha = self.senha_entry.get()
-        
-        if not login:
-            messagebox.showwarning("Aviso", "Por favor, digite o login!")
-            self.login_entry.focus()
-            return
-        
-        if not senha:
-            messagebox.showwarning("Aviso", "Por favor, digite a senha!")
-            self.senha_entry.focus()
-            return
-        
-        # Verificar se usuário já existe
-        if login in self.users:
-            messagebox.showerror("Erro", "Este login já está cadastrado!")
-            self.login_entry.focus()
-            return
-        
-        # Cadastrar novo usuário
-        self.users[login] = senha
-        self.save_users()
-        messagebox.showinfo("Sucesso", "Usuário cadastrado com sucesso!")
-        self.clear_fields()
+    def abrir_cadastro(self):
+        """Troca para a tela de cadastro"""
+        self.app.mostrar_cadastro()
     
     def clear_fields(self):
         """Limpa os campos de entrada"""
@@ -161,9 +205,159 @@ class LoginScreen:
         self.login_entry.focus()
 
 
+class CadastroScreen:
+    def __init__(self, parent, app):
+        self.parent = parent
+        self.app = app
+        
+        # Frame principal que ocupa toda a janela
+        self.main_frame = ttk.Frame(parent)
+        
+        # Frame centralizado que contém todo o conteúdo
+        center_frame = ttk.Frame(self.main_frame)
+        center_frame.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
+        
+        # Título
+        title_label = ttk.Label(
+            center_frame, 
+            text="Cadastro de Usuário", 
+            font=("Arial", 18, "bold")
+        )
+        title_label.grid(row=0, column=0, pady=(0, 30))
+        
+        # Frame para campos de entrada
+        entry_frame = ttk.Frame(center_frame)
+        entry_frame.grid(row=1, column=0, pady=(0, 20))
+        
+        # Campo de Nome
+        nome_label = ttk.Label(entry_frame, text="Nome:", font=("Arial", 10))
+        nome_label.grid(row=0, column=0, sticky=tk.W, pady=(0, 5))
+        
+        self.nome_entry = ttk.Entry(entry_frame, font=("Arial", 11), width=35)
+        self.nome_entry.grid(row=1, column=0, pady=(0, 15))
+        
+        # Campo de Email
+        email_label = ttk.Label(entry_frame, text="Email:", font=("Arial", 10))
+        email_label.grid(row=2, column=0, sticky=tk.W, pady=(0, 5))
+        
+        self.email_entry = ttk.Entry(entry_frame, font=("Arial", 11), width=35)
+        self.email_entry.grid(row=3, column=0, pady=(0, 15))
+        
+        # Campo de Senha
+        senha_label = ttk.Label(entry_frame, text="Senha:", font=("Arial", 10))
+        senha_label.grid(row=4, column=0, sticky=tk.W, pady=(0, 5))
+        
+        self.senha_entry = ttk.Entry(
+            entry_frame, 
+            font=("Arial", 11), 
+            width=35, 
+            show="*"
+        )
+        self.senha_entry.grid(row=5, column=0, pady=(0, 20))
+        
+        # Bind Enter key
+        self.nome_entry.bind("<Return>", lambda e: self.email_entry.focus())
+        self.email_entry.bind("<Return>", lambda e: self.senha_entry.focus())
+        self.senha_entry.bind("<Return>", lambda e: self.cadastrar())
+        
+        # Frame para botões
+        button_frame = ttk.Frame(center_frame)
+        button_frame.grid(row=2, column=0)
+        
+        # Botão Cadastrar
+        cadastrar_btn = ttk.Button(
+            button_frame,
+            text="Cadastrar",
+            command=self.cadastrar,
+            width=15
+        )
+        cadastrar_btn.grid(row=0, column=0, padx=(0, 5), sticky=tk.EW)
+        
+        # Botão Voltar
+        voltar_btn = ttk.Button(
+            button_frame,
+            text="Voltar",
+            command=self.voltar,
+            width=15
+        )
+        voltar_btn.grid(row=0, column=1, sticky=tk.EW)
+        
+        # Configurar colunas para expandir igualmente
+        button_frame.columnconfigure(0, weight=1)
+        button_frame.columnconfigure(1, weight=1)
+    
+    def mostrar(self):
+        """Mostra o frame de cadastro"""
+        self.main_frame.pack(fill=tk.BOTH, expand=True)
+        self.clear_fields()
+        self.nome_entry.focus()
+    
+    def esconder(self):
+        """Esconde o frame de cadastro"""
+        self.main_frame.pack_forget()
+    
+    def validar_email(self, email):
+        """Valida formato de email"""
+        pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+        return re.match(pattern, email) is not None
+    
+    def cadastrar(self):
+        """Função do botão Cadastrar"""
+        nome = self.nome_entry.get().strip()
+        email = self.email_entry.get().strip()
+        senha = self.senha_entry.get()
+        
+        # Validações
+        if not nome:
+            messagebox.showwarning("Aviso", "Por favor, digite o nome!")
+            self.nome_entry.focus()
+            return
+        
+        if not email:
+            messagebox.showwarning("Aviso", "Por favor, digite o email!")
+            self.email_entry.focus()
+            return
+        
+        if not self.validar_email(email):
+            messagebox.showerror("Erro", "Por favor, digite um email válido!")
+            self.email_entry.focus()
+            return
+        
+        if not senha:
+            messagebox.showwarning("Aviso", "Por favor, digite a senha!")
+            self.senha_entry.focus()
+            return
+        
+        # Verificar se email já está cadastrado
+        if email in self.app.users:
+            messagebox.showerror("Erro", "Este email já está cadastrado!")
+            self.email_entry.focus()
+            return
+        
+        # Cadastrar novo usuário
+        self.app.users[email] = {
+            "nome": nome,
+            "email": email,
+            "senha": senha
+        }
+        self.app.save_users()
+        messagebox.showinfo("Sucesso", "Usuário cadastrado com sucesso!")
+        self.voltar()
+    
+    def voltar(self):
+        """Volta para a tela de login"""
+        self.app.mostrar_login()
+    
+    def clear_fields(self):
+        """Limpa os campos de entrada"""
+        self.nome_entry.delete(0, tk.END)
+        self.email_entry.delete(0, tk.END)
+        self.senha_entry.delete(0, tk.END)
+
+
 def main():
     root = tk.Tk()
-    app = LoginScreen(root)
+    app = App(root)
     root.mainloop()
 
 
