@@ -15,13 +15,17 @@ class App:
         self.db_file = "users.db"
         self.init_database()
         
-        # Container principal que vai conter os frames de login e cadastro
+        # Container principal que vai conter os frames de login, cadastro e página inicial
         self.container = ttk.Frame(root)
         self.container.pack(fill=tk.BOTH, expand=True)
         
-        # Criar frames de login e cadastro
+        # Criar frames de login, cadastro e página inicial
         self.login_frame = LoginScreen(self.container, self)
         self.cadastro_frame = CadastroScreen(self.container, self)
+        self.pagina_inicial_frame = PaginaInicialScreen(self.container, self)
+        
+        # Variável para armazenar usuário logado
+        self.usuario_logado = None
         
         # Mostrar inicialmente a tela de login
         self.mostrar_login()
@@ -39,20 +43,43 @@ class App:
         self.root.geometry(f'{width}x{height}+{x}+{y}')
     
     def mostrar_login(self):
-        """Mostra a tela de login e esconde a de cadastro"""
+        """Mostra a tela de login e esconde as outras"""
         self.root.title("Tela de Login")
         self.root.geometry("400x300")
         self.cadastro_frame.esconder()
+        self.pagina_inicial_frame.esconder()
         self.login_frame.mostrar()
+        self.usuario_logado = None
         self.center_window()
     
     def mostrar_cadastro(self):
-        """Mostra a tela de cadastro e esconde a de login"""
+        """Mostra a tela de cadastro e esconde as outras"""
         self.root.title("Cadastro de Usuário")
         self.root.geometry("450x400")
         self.login_frame.esconder()
+        self.pagina_inicial_frame.esconder()
         self.cadastro_frame.mostrar()
         self.center_window()
+    
+    def mostrar_pagina_inicial(self, nome_usuario):
+        """Mostra a página inicial e esconde as outras"""
+        # Esconder todas as outras telas primeiro
+        self.login_frame.esconder()
+        self.cadastro_frame.esconder()
+        
+        # Configurar usuário logado
+        self.usuario_logado = nome_usuario
+        
+        # Atualizar título e tamanho da janela
+        self.root.title("Página Inicial")
+        self.root.geometry("600x500")
+        
+        # Mostrar página inicial
+        self.pagina_inicial_frame.mostrar()
+        
+        # Centralizar e atualizar janela
+        self.center_window()
+        self.root.update_idletasks()
     
     def init_database(self):
         """Inicializa o banco de dados SQLite e cria a tabela se não existir"""
@@ -233,8 +260,14 @@ class LoginScreen:
         
         if resultado:
             nome = resultado[0]
-            messagebox.showinfo("Sucesso", f"Bem-vindo, {nome}!")
+            # Limpar campos primeiro
             self.clear_fields()
+            # Esconder a tela de login imediatamente
+            self.esconder()
+            # Abrir página inicial substituindo a tela de login
+            self.app.mostrar_pagina_inicial(nome)
+            # Atualizar a janela para garantir que a troca seja visível
+            self.app.root.update_idletasks()
         else:
             messagebox.showerror("Erro", "Email ou senha incorretos!")
             self.senha_entry.delete(0, tk.END)
@@ -396,6 +429,60 @@ class CadastroScreen:
         self.nome_entry.delete(0, tk.END)
         self.email_entry.delete(0, tk.END)
         self.senha_entry.delete(0, tk.END)
+
+
+class PaginaInicialScreen:
+    def __init__(self, parent, app):
+        self.parent = parent
+        self.app = app
+        
+        # Frame principal que ocupa toda a janela
+        self.main_frame = ttk.Frame(parent)
+        
+        # Frame centralizado que contém todo o conteúdo
+        center_frame = ttk.Frame(self.main_frame)
+        center_frame.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
+        
+        # Título
+        self.title_label = ttk.Label(
+            center_frame, 
+            text="Página Inicial", 
+            font=("Arial", 20, "bold")
+        )
+        self.title_label.grid(row=0, column=0, pady=(0, 20))
+        
+        # Mensagem de boas-vindas (será atualizada)
+        self.welcome_label = ttk.Label(
+            center_frame,
+            text="Bem-vindo!",
+            font=("Arial", 14)
+        )
+        self.welcome_label.grid(row=1, column=0, pady=(0, 30))
+        
+        # Botão Sair
+        sair_btn = ttk.Button(
+            center_frame,
+            text="Sair",
+            command=self.sair,
+            width=20
+        )
+        sair_btn.grid(row=2, column=0, pady=(20, 0))
+    
+    def mostrar(self):
+        """Mostra o frame da página inicial"""
+        self.main_frame.pack(fill=tk.BOTH, expand=True)
+        # Atualizar mensagem de boas-vindas com o nome do usuário
+        if self.app.usuario_logado:
+            self.welcome_label.config(text=f"Bem-vindo, {self.app.usuario_logado}!")
+    
+    def esconder(self):
+        """Esconde o frame da página inicial"""
+        self.main_frame.pack_forget()
+    
+    def sair(self):
+        """Encerra o aplicativo"""
+        self.app.root.quit()
+        self.app.root.destroy()
 
 
 def main():
