@@ -78,8 +78,8 @@ class App:
             self.root.title("Página Inicial - Admin")
             self.root.geometry("800x600")
         else:
-            self.root.title("Página Inicial")
-            self.root.geometry("600x500")
+            self.root.title("Quadro Kanban")
+            self.root.geometry("1000x700")
         
         # Mostrar página inicial
         self.pagina_inicial_frame.mostrar()
@@ -100,6 +100,18 @@ class App:
                 nome TEXT NOT NULL,
                 email TEXT UNIQUE NOT NULL,
                 senha TEXT NOT NULL
+            )
+        ''')
+        
+        # Criar tabela de tarefas se não existir
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS tarefas (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                usuario_email TEXT NOT NULL,
+                titulo TEXT NOT NULL,
+                descricao TEXT,
+                status TEXT NOT NULL,
+                FOREIGN KEY (usuario_email) REFERENCES usuarios(email)
             )
         ''')
         
@@ -185,6 +197,9 @@ class App:
         cursor = conn.cursor()
         
         try:
+            # Excluir tarefas do usuário primeiro
+            cursor.execute('DELETE FROM tarefas WHERE usuario_email = ?', (email,))
+            # Excluir o usuário
             cursor.execute('DELETE FROM usuarios WHERE email = ?', (email,))
             if cursor.rowcount > 0:
                 conn.commit()
@@ -196,6 +211,102 @@ class App:
         except Exception as e:
             conn.close()
             return False, f"Erro ao excluir usuário: {str(e)}"
+    
+    def listar_tarefas(self, usuario_email):
+        """Lista todas as tarefas de um usuário"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT id, titulo, descricao, status FROM tarefas 
+            WHERE usuario_email = ? 
+            ORDER BY id DESC
+        ''', (usuario_email,))
+        
+        tarefas = cursor.fetchall()
+        conn.close()
+        
+        return tarefas
+    
+    def adicionar_tarefa(self, usuario_email, titulo, descricao, status="A Fazer"):
+        """Adiciona uma nova tarefa"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('''
+                INSERT INTO tarefas (usuario_email, titulo, descricao, status)
+                VALUES (?, ?, ?, ?)
+            ''', (usuario_email, titulo, descricao, status))
+            
+            conn.commit()
+            tarefa_id = cursor.lastrowid
+            conn.close()
+            return True, tarefa_id
+        except Exception as e:
+            conn.close()
+            return False, str(e)
+    
+    def verificar_propriedade_tarefa(self, tarefa_id, usuario_email):
+        """Verifica se uma tarefa pertence a um usuário"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT usuario_email FROM tarefas WHERE id = ?', (tarefa_id,))
+        resultado = cursor.fetchone()
+        conn.close()
+        
+        if resultado and resultado[0] == usuario_email:
+            return True
+        return False
+    
+    def atualizar_status_tarefa(self, tarefa_id, novo_status, usuario_email=None):
+        """Atualiza o status de uma tarefa (apenas se pertencer ao usuário)"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Se forneceu usuario_email, validar propriedade
+            if usuario_email:
+                if not self.verificar_propriedade_tarefa(tarefa_id, usuario_email):
+                    conn.close()
+                    return False, "Você não tem permissão para modificar esta tarefa!"
+            
+            cursor.execute('UPDATE tarefas SET status = ? WHERE id = ?', (novo_status, tarefa_id))
+            if cursor.rowcount > 0:
+                conn.commit()
+                conn.close()
+                return True, "Tarefa atualizada com sucesso!"
+            else:
+                conn.close()
+                return False, "Tarefa não encontrada!"
+        except Exception as e:
+            conn.close()
+            return False, f"Erro ao atualizar tarefa: {str(e)}"
+    
+    def excluir_tarefa(self, tarefa_id, usuario_email=None):
+        """Exclui uma tarefa (apenas se pertencer ao usuário)"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            # Se forneceu usuario_email, validar propriedade
+            if usuario_email:
+                if not self.verificar_propriedade_tarefa(tarefa_id, usuario_email):
+                    conn.close()
+                    return False, "Você não tem permissão para excluir esta tarefa!"
+            
+            cursor.execute('DELETE FROM tarefas WHERE id = ?', (tarefa_id,))
+            if cursor.rowcount > 0:
+                conn.commit()
+                conn.close()
+                return True, "Tarefa excluída com sucesso!"
+            else:
+                conn.close()
+                return False, "Tarefa não encontrada!"
+        except Exception as e:
+            conn.close()
+            return False, f"Erro ao excluir tarefa: {str(e)}"
 
 
 class LoginScreen:
@@ -566,6 +677,109 @@ class PaginaInicialScreen:
         bottom_frame = ttk.Frame(self.main_frame)
         bottom_frame.pack(fill=tk.X, padx=20, pady=10)
         
+        # Frame para quadro Kanban (usuários não-admin)
+        self.kanban_frame = ttk.LabelFrame(
+            top_frame,
+            text="Quadro Kanban",
+            padding=10
+        )
+        
+        # Botões do Kanban
+        kanban_buttons_frame = ttk.Frame(self.kanban_frame)
+        kanban_buttons_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        nova_tarefa_btn = ttk.Button(
+            kanban_buttons_frame,
+            text="Nova Tarefa",
+            command=self.nova_tarefa,
+            width=20
+        )
+        nova_tarefa_btn.pack(side=tk.LEFT, padx=(0, 10))
+        
+        atualizar_kanban_btn = ttk.Button(
+            kanban_buttons_frame,
+            text="Atualizar",
+            command=self.carregar_kanban,
+            width=15
+        )
+        atualizar_kanban_btn.pack(side=tk.LEFT)
+        
+        # Frame para colunas do Kanban
+        kanban_columns_frame = ttk.Frame(self.kanban_frame)
+        kanban_columns_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Colunas do Kanban
+        self.colunas_kanban = {
+            "A Fazer": [],
+            "Em Progresso": [],
+            "Concluído": []
+        }
+        
+        # Criar colunas
+        self.kanban_widgets = {}
+        for i, coluna in enumerate(["A Fazer", "Em Progresso", "Concluído"]):
+            # Frame da coluna
+            col_frame = ttk.LabelFrame(
+                kanban_columns_frame,
+                text=coluna,
+                padding=5
+            )
+            col_frame.grid(row=0, column=i, padx=5, sticky=tk.NSEW, pady=5)
+            kanban_columns_frame.columnconfigure(i, weight=1)
+            
+            # Listbox para tarefas da coluna
+            listbox = tk.Listbox(
+                col_frame,
+                height=15,
+                font=("Arial", 10),
+                selectmode=tk.SINGLE
+            )
+            listbox.pack(fill=tk.BOTH, expand=True, pady=(5, 0))
+            
+            # Frame para botões da coluna
+            col_buttons = ttk.Frame(col_frame)
+            col_buttons.pack(fill=tk.X, pady=(5, 0))
+            
+            if coluna == "A Fazer":
+                mover_btn = ttk.Button(
+                    col_buttons,
+                    text="▶ Em Progresso",
+                    command=lambda: self.mover_tarefa("A Fazer", "Em Progresso")
+                )
+                mover_btn.pack(side=tk.LEFT, padx=2)
+            elif coluna == "Em Progresso":
+                mover_esq_btn = ttk.Button(
+                    col_buttons,
+                    text="◀ A Fazer",
+                    command=lambda: self.mover_tarefa("Em Progresso", "A Fazer")
+                )
+                mover_esq_btn.pack(side=tk.LEFT, padx=2)
+                mover_dir_btn = ttk.Button(
+                    col_buttons,
+                    text="▶ Concluído",
+                    command=lambda: self.mover_tarefa("Em Progresso", "Concluído")
+                )
+                mover_dir_btn.pack(side=tk.LEFT, padx=2)
+            elif coluna == "Concluído":
+                mover_btn = ttk.Button(
+                    col_buttons,
+                    text="◀ Em Progresso",
+                    command=lambda: self.mover_tarefa("Concluído", "Em Progresso")
+                )
+                mover_btn.pack(side=tk.LEFT, padx=2)
+            
+            excluir_btn = ttk.Button(
+                col_buttons,
+                text="Excluir",
+                command=lambda c=coluna: self.excluir_tarefa_kanban(c)
+            )
+            excluir_btn.pack(side=tk.LEFT, padx=2)
+            
+            self.kanban_widgets[coluna] = {
+                "frame": col_frame,
+                "listbox": listbox
+            }
+        
         # Botão Sair
         sair_btn = ttk.Button(
             bottom_frame,
@@ -587,9 +801,13 @@ class PaginaInicialScreen:
         # Se for admin, mostrar seção de gerenciamento de usuários
         if self.app.email_logado == "admin":
             self.usuarios_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 20))
+            self.kanban_frame.pack_forget()
             self.atualizar_lista()
         else:
+            # Se não for admin, mostrar quadro Kanban
             self.usuarios_frame.pack_forget()
+            self.kanban_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 20))
+            self.carregar_kanban()
     
     def esconder(self):
         """Esconde o frame da página inicial"""
@@ -753,6 +971,190 @@ class PaginaInicialScreen:
         nome_entry.bind("<Return>", lambda e: email_entry.focus())
         email_entry.bind("<Return>", lambda e: senha_entry.focus())
         senha_entry.bind("<Return>", lambda e: salvar())
+    
+    def carregar_kanban(self):
+        """Carrega as tarefas do usuário logado no Kanban"""
+        # Limpar todas as listboxes
+        for coluna in self.kanban_widgets:
+            self.kanban_widgets[coluna]["listbox"].delete(0, tk.END)
+        
+        # Verificar se há usuário logado
+        if not self.app.email_logado:
+            return
+        
+        # Buscar apenas as tarefas do usuário logado
+        tarefas = self.app.listar_tarefas(self.app.email_logado)
+        
+        # Organizar tarefas por coluna
+        self.colunas_kanban = {
+            "A Fazer": [],
+            "Em Progresso": [],
+            "Concluído": []
+        }
+        
+        for tarefa in tarefas:
+            tarefa_id, titulo, descricao, status = tarefa
+            # Garantir que o status existe
+            if status not in self.colunas_kanban:
+                status = "A Fazer"
+            self.colunas_kanban[status].append((tarefa_id, titulo, descricao))
+        
+        # Adicionar tarefas nas listboxes
+        for coluna, tarefas_lista in self.colunas_kanban.items():
+            for tarefa_id, titulo, descricao in tarefas_lista:
+                display_text = f"[{tarefa_id}] {titulo}"
+                if descricao:
+                    display_text += f"\n  {descricao[:30]}..."
+                self.kanban_widgets[coluna]["listbox"].insert(tk.END, display_text)
+                # Armazenar tarefa_id no item
+                index = self.kanban_widgets[coluna]["listbox"].size() - 1
+                self.kanban_widgets[coluna]["listbox"].itemconfig(index, {'bg': '#f0f0f0'})
+    
+    def nova_tarefa(self):
+        """Abre janela para adicionar nova tarefa"""
+        janela = tk.Toplevel(self.app.root)
+        janela.title("Nova Tarefa")
+        janela.geometry("450x350")
+        janela.resizable(False, False)
+        janela.transient(self.app.root)
+        janela.grab_set()
+        
+        # Centralizar
+        janela.update_idletasks()
+        width = janela.winfo_width()
+        height = janela.winfo_height()
+        x = (janela.winfo_screenwidth() // 2) - (width // 2)
+        y = (janela.winfo_screenheight() // 2) - (height // 2)
+        janela.geometry(f'{width}x{height}+{x}+{y}')
+        
+        # Frame principal
+        main_frame = ttk.Frame(janela, padding=20)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Frame para conteúdo (evita que expanda demais)
+        content_frame = ttk.Frame(main_frame)
+        content_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Título
+        ttk.Label(content_frame, text="Nova Tarefa", font=("Arial", 14, "bold")).pack(pady=(0, 15))
+        
+        # Frame para campos
+        fields_frame = ttk.Frame(content_frame)
+        fields_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Título da tarefa
+        ttk.Label(fields_frame, text="Título:", font=("Arial", 10)).pack(anchor=tk.W, pady=(0, 5))
+        titulo_entry = ttk.Entry(fields_frame, font=("Arial", 11), width=40)
+        titulo_entry.pack(fill=tk.X, pady=(0, 15))
+        titulo_entry.focus()
+        
+        # Descrição
+        ttk.Label(fields_frame, text="Descrição:", font=("Arial", 10)).pack(anchor=tk.W, pady=(0, 5))
+        
+        # Frame para Text com scrollbar
+        desc_frame = ttk.Frame(fields_frame)
+        desc_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 15))
+        
+        descricao_text = tk.Text(desc_frame, font=("Arial", 10), width=40, height=8, wrap=tk.WORD)
+        desc_scrollbar = ttk.Scrollbar(desc_frame, orient=tk.VERTICAL, command=descricao_text.yview)
+        descricao_text.config(yscrollcommand=desc_scrollbar.set)
+        
+        descricao_text.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        desc_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        def salvar():
+            titulo = titulo_entry.get().strip()
+            descricao = descricao_text.get("1.0", tk.END).strip()
+            
+            if not titulo:
+                messagebox.showwarning("Aviso", "Por favor, digite o título da tarefa!")
+                titulo_entry.focus()
+                return
+            
+            sucesso, resultado = self.app.adicionar_tarefa(
+                self.app.email_logado,
+                titulo,
+                descricao,
+                "A Fazer"
+            )
+            
+            if sucesso:
+                messagebox.showinfo("Sucesso", "Tarefa adicionada com sucesso!")
+                janela.destroy()
+                self.carregar_kanban()
+            else:
+                messagebox.showerror("Erro", f"Erro ao adicionar tarefa: {resultado}")
+        
+        # Frame para botões (fixo na parte inferior)
+        buttons_frame = ttk.Frame(main_frame)
+        buttons_frame.pack(fill=tk.X, pady=(10, 0))
+        
+        salvar_btn = ttk.Button(buttons_frame, text="Salvar", command=salvar, width=15)
+        salvar_btn.pack(side=tk.LEFT, padx=(0, 10))
+        
+        cancelar_btn = ttk.Button(buttons_frame, text="Cancelar", command=janela.destroy, width=15)
+        cancelar_btn.pack(side=tk.LEFT)
+        
+        titulo_entry.bind("<Return>", lambda e: descricao_text.focus())
+    
+    def mover_tarefa(self, origem, destino):
+        """Move uma tarefa entre colunas"""
+        listbox_origem = self.kanban_widgets[origem]["listbox"]
+        selecionado = listbox_origem.curselection()
+        
+        if not selecionado:
+            messagebox.showwarning("Aviso", "Por favor, selecione uma tarefa para mover!")
+            return
+        
+        # Obter o texto da tarefa selecionada
+        texto = listbox_origem.get(selecionado[0])
+        # Extrair tarefa_id do texto [id] titulo
+        try:
+            tarefa_id = int(texto.split(']')[0].replace('[', '').strip())
+        except:
+            messagebox.showerror("Erro", "Erro ao identificar a tarefa!")
+            return
+        
+        # Atualizar status no banco de dados (com validação de propriedade)
+        sucesso, mensagem = self.app.atualizar_status_tarefa(tarefa_id, destino, self.app.email_logado)
+        if sucesso:
+            self.carregar_kanban()
+        else:
+            messagebox.showerror("Erro", mensagem)
+    
+    def excluir_tarefa_kanban(self, coluna):
+        """Exclui uma tarefa selecionada"""
+        listbox = self.kanban_widgets[coluna]["listbox"]
+        selecionado = listbox.curselection()
+        
+        if not selecionado:
+            messagebox.showwarning("Aviso", "Por favor, selecione uma tarefa para excluir!")
+            return
+        
+        # Obter o texto da tarefa selecionada
+        texto = listbox.get(selecionado[0])
+        # Extrair tarefa_id do texto [id] titulo
+        try:
+            tarefa_id = int(texto.split(']')[0].replace('[', '').strip())
+            titulo = texto.split(']')[1].strip().split('\n')[0]
+        except:
+            messagebox.showerror("Erro", "Erro ao identificar a tarefa!")
+            return
+        
+        # Confirmar exclusão
+        resposta = messagebox.askyesno(
+            "Confirmar Exclusão",
+            f"Deseja realmente excluir a tarefa \"{titulo}\"?"
+        )
+        
+        if resposta:
+            # Excluir tarefa (com validação de propriedade)
+            sucesso, mensagem = self.app.excluir_tarefa(tarefa_id, self.app.email_logado)
+            if sucesso:
+                messagebox.showinfo("Sucesso", mensagem)
+                self.carregar_kanban()
+            else:
+                messagebox.showerror("Erro", mensagem)
     
     def sair(self):
         """Volta para a tela de login"""
