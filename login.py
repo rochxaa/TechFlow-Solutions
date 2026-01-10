@@ -273,6 +273,22 @@ class App:
             conn.close()
             return False, str(e)
     
+    def obter_prioridade_tarefa(self, tarefa_id):
+        """Obtém a prioridade atual de uma tarefa"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('SELECT prioridade FROM tarefas WHERE id = ?', (tarefa_id,))
+            resultado = cursor.fetchone()
+            conn.close()
+            if resultado:
+                return resultado[0] if resultado[0] else 0
+            return 0
+        except Exception as e:
+            conn.close()
+            return 0
+    
     def atualizar_prioridade_tarefa(self, tarefa_id, prioridade):
         """Atualiza a prioridade de uma tarefa"""
         conn = self.get_connection()
@@ -801,6 +817,11 @@ class PaginaInicialScreen:
                 selectmode=tk.SINGLE
             )
             listbox.pack(fill=tk.BOTH, expand=True, pady=(5, 0))
+            
+            # Vincular evento de clique direito para mostrar menu de contexto
+            # Button-3 funciona no Windows/Linux, Button-2 também pode funcionar no Linux
+            listbox.bind("<Button-3>", lambda e, c=coluna: self.mostrar_menu_contexto(e, c))
+            listbox.bind("<Button-2>", lambda e, c=coluna: self.mostrar_menu_contexto(e, c))
             
             # Frame para botões da coluna
             col_buttons = ttk.Frame(col_frame)
@@ -1331,6 +1352,75 @@ class PaginaInicialScreen:
                 self.carregar_kanban()
         else:
             messagebox.showerror("Erro", mensagem)
+    
+    def mostrar_menu_contexto(self, event, coluna):
+        """Mostra o menu de contexto no clique direito"""
+        listbox = self.kanban_widgets[coluna]["listbox"]
+        
+        # Selecionar o item clicado
+        index = listbox.nearest(event.y)
+        if index < 0:
+            return
+        
+        listbox.selection_clear(0, tk.END)
+        listbox.selection_set(index)
+        listbox.activate(index)
+        
+        # Obter o texto da tarefa selecionada
+        texto = listbox.get(index)
+        # Extrair tarefa_id do texto [id] titulo ou 🔴 [id] titulo
+        try:
+            texto_id = texto.replace('🔴', '').strip()
+            tarefa_id = int(texto_id.split(']')[0].replace('[', '').strip())
+        except:
+            return
+        
+        # Verificar prioridade atual da tarefa
+        prioridade_atual = self.app.obter_prioridade_tarefa(tarefa_id)
+        
+        # Criar menu de contexto
+        menu = tk.Menu(self.app.root, tearoff=0)
+        
+        # Adicionar opção de priorizar ou despriorizar
+        if prioridade_atual == 1:
+            menu.add_command(label="Despriorizar", command=lambda: self.alterar_prioridade_tarefa(coluna, 0))
+        else:
+            menu.add_command(label="Priorizar", command=lambda: self.alterar_prioridade_tarefa(coluna, 1))
+        
+        # Mostrar menu na posição do clique
+        try:
+            menu.tk_popup(event.x_root, event.y_root)
+        finally:
+            menu.grab_release()
+    
+    def alterar_prioridade_tarefa(self, coluna, nova_prioridade):
+        """Altera a prioridade de uma tarefa"""
+        listbox = self.kanban_widgets[coluna]["listbox"]
+        selecionado = listbox.curselection()
+        
+        if not selecionado:
+            return
+        
+        # Obter o texto da tarefa selecionada
+        texto = listbox.get(selecionado[0])
+        # Extrair tarefa_id do texto [id] titulo ou 🔴 [id] titulo
+        try:
+            texto_id = texto.replace('🔴', '').strip()
+            tarefa_id = int(texto_id.split(']')[0].replace('[', '').strip())
+        except:
+            messagebox.showerror("Erro", "Erro ao identificar a tarefa!")
+            return
+        
+        # Atualizar prioridade no banco de dados
+        sucesso = self.app.atualizar_prioridade_tarefa(tarefa_id, nova_prioridade)
+        if sucesso:
+            # Recarregar o Kanban para atualizar a exibição
+            if self.app.email_logado == "admin":
+                self.carregar_kanban_admin()
+            else:
+                self.carregar_kanban()
+        else:
+            messagebox.showerror("Erro", "Erro ao alterar prioridade da tarefa!")
     
     def excluir_tarefa_kanban(self, coluna):
         """Exclui uma tarefa selecionada"""
