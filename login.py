@@ -24,8 +24,9 @@ class App:
         self.cadastro_frame = CadastroScreen(self.container, self)
         self.pagina_inicial_frame = PaginaInicialScreen(self.container, self)
         
-        # Variável para armazenar usuário logado
+        # Variáveis para armazenar informações do usuário logado
         self.usuario_logado = None
+        self.email_logado = None
         
         # Mostrar inicialmente a tela de login
         self.mostrar_login()
@@ -50,6 +51,7 @@ class App:
         self.pagina_inicial_frame.esconder()
         self.login_frame.mostrar()
         self.usuario_logado = None
+        self.email_logado = None
         self.center_window()
     
     def mostrar_cadastro(self):
@@ -61,7 +63,7 @@ class App:
         self.cadastro_frame.mostrar()
         self.center_window()
     
-    def mostrar_pagina_inicial(self, nome_usuario):
+    def mostrar_pagina_inicial(self, nome_usuario, email_usuario):
         """Mostra a página inicial e esconde as outras"""
         # Esconder todas as outras telas primeiro
         self.login_frame.esconder()
@@ -69,10 +71,15 @@ class App:
         
         # Configurar usuário logado
         self.usuario_logado = nome_usuario
+        self.email_logado = email_usuario
         
         # Atualizar título e tamanho da janela
-        self.root.title("Página Inicial")
-        self.root.geometry("600x500")
+        if email_usuario == "admin":
+            self.root.title("Página Inicial - Admin")
+            self.root.geometry("800x600")
+        else:
+            self.root.title("Página Inicial")
+            self.root.geometry("600x500")
         
         # Mostrar página inicial
         self.pagina_inicial_frame.mostrar()
@@ -156,6 +163,39 @@ class App:
         except sqlite3.IntegrityError:
             conn.close()
             return False
+    
+    def listar_usuarios(self):
+        """Lista todos os usuários cadastrados"""
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT id, nome, email FROM usuarios ORDER BY nome')
+        usuarios = cursor.fetchall()
+        conn.close()
+        
+        return usuarios
+    
+    def excluir_usuario(self, email):
+        """Exclui um usuário do banco de dados"""
+        # Não permitir excluir o próprio admin
+        if email == "admin":
+            return False, "Não é possível excluir o usuário administrador!"
+        
+        conn = self.get_connection()
+        cursor = conn.cursor()
+        
+        try:
+            cursor.execute('DELETE FROM usuarios WHERE email = ?', (email,))
+            if cursor.rowcount > 0:
+                conn.commit()
+                conn.close()
+                return True, "Usuário excluído com sucesso!"
+            else:
+                conn.close()
+                return False, "Usuário não encontrado!"
+        except Exception as e:
+            conn.close()
+            return False, f"Erro ao excluir usuário: {str(e)}"
 
 
 class LoginScreen:
@@ -260,12 +300,13 @@ class LoginScreen:
         
         if resultado:
             nome = resultado[0]
+            email = resultado[1]
             # Limpar campos primeiro
             self.clear_fields()
             # Esconder a tela de login imediatamente
             self.esconder()
             # Abrir página inicial substituindo a tela de login
-            self.app.mostrar_pagina_inicial(nome)
+            self.app.mostrar_pagina_inicial(nome, email)
             # Atualizar a janela para garantir que a troca seja visível
             self.app.root.update_idletasks()
         else:
@@ -439,50 +480,283 @@ class PaginaInicialScreen:
         # Frame principal que ocupa toda a janela
         self.main_frame = ttk.Frame(parent)
         
-        # Frame centralizado que contém todo o conteúdo
-        center_frame = ttk.Frame(self.main_frame)
-        center_frame.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
+        # Frame superior para conteúdo geral
+        top_frame = ttk.Frame(self.main_frame)
+        top_frame.pack(fill=tk.BOTH, expand=True, padx=20, pady=20)
         
-        # Título
-        self.title_label = ttk.Label(
-            center_frame, 
-            text="Página Inicial", 
-            font=("Arial", 20, "bold")
-        )
-        self.title_label.grid(row=0, column=0, pady=(0, 20))
-        
-        # Mensagem de boas-vindas (será atualizada)
+        # Mensagem de boas-vindas
         self.welcome_label = ttk.Label(
-            center_frame,
+            top_frame,
             text="Bem-vindo!",
-            font=("Arial", 14)
+            font=("Arial", 16, "bold")
         )
-        self.welcome_label.grid(row=1, column=0, pady=(0, 30))
+        self.welcome_label.pack(pady=(0, 20))
+        
+        # Frame para seção de usuários (apenas admin)
+        self.usuarios_frame = ttk.LabelFrame(
+            top_frame, 
+            text="Gerenciamento de Usuários", 
+            padding=10
+        )
+        
+        # Botões de ação (Cadastrar e Atualizar)
+        buttons_frame = ttk.Frame(self.usuarios_frame)
+        buttons_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        cadastrar_btn = ttk.Button(
+            buttons_frame,
+            text="Cadastrar Novo Usuário",
+            command=self.cadastrar_usuario,
+            width=25
+        )
+        cadastrar_btn.pack(side=tk.LEFT, padx=(0, 10))
+        
+        atualizar_btn = ttk.Button(
+            buttons_frame,
+            text="Atualizar Lista",
+            command=self.atualizar_lista,
+            width=20
+        )
+        atualizar_btn.pack(side=tk.LEFT)
+        
+        # Treeview para listar usuários
+        tree_frame = ttk.Frame(self.usuarios_frame)
+        tree_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Scrollbars
+        v_scrollbar = ttk.Scrollbar(tree_frame, orient=tk.VERTICAL)
+        v_scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
+        
+        h_scrollbar = ttk.Scrollbar(tree_frame, orient=tk.HORIZONTAL)
+        h_scrollbar.pack(side=tk.BOTTOM, fill=tk.X)
+        
+        # Treeview
+        self.tree = ttk.Treeview(
+            tree_frame,
+            columns=("ID", "Nome", "Email"),
+            show="headings",
+            yscrollcommand=v_scrollbar.set,
+            xscrollcommand=h_scrollbar.set,
+            height=10
+        )
+        
+        # Configurar colunas
+        self.tree.heading("ID", text="ID")
+        self.tree.heading("Nome", text="Nome")
+        self.tree.heading("Email", text="Email")
+        
+        self.tree.column("ID", width=50, anchor=tk.CENTER)
+        self.tree.column("Nome", width=200)
+        self.tree.column("Email", width=250)
+        
+        self.tree.pack(side=tk.LEFT, fill=tk.BOTH, expand=True)
+        v_scrollbar.config(command=self.tree.yview)
+        h_scrollbar.config(command=self.tree.xview)
+        
+        # Botão Excluir
+        excluir_btn = ttk.Button(
+            self.usuarios_frame,
+            text="Excluir Usuário Selecionado",
+            command=self.excluir_usuario,
+            width=30
+        )
+        excluir_btn.pack(pady=(10, 0))
+        
+        # Frame inferior para botão Sair
+        bottom_frame = ttk.Frame(self.main_frame)
+        bottom_frame.pack(fill=tk.X, padx=20, pady=10)
         
         # Botão Sair
         sair_btn = ttk.Button(
-            center_frame,
+            bottom_frame,
             text="Sair",
             command=self.sair,
             width=20
         )
-        sair_btn.grid(row=2, column=0, pady=(20, 0))
+        sair_btn.pack(side=tk.RIGHT)
     
     def mostrar(self):
         """Mostra o frame da página inicial"""
+        # Empacotar o frame principal
         self.main_frame.pack(fill=tk.BOTH, expand=True)
+        
         # Atualizar mensagem de boas-vindas com o nome do usuário
         if self.app.usuario_logado:
             self.welcome_label.config(text=f"Bem-vindo, {self.app.usuario_logado}!")
+        
+        # Se for admin, mostrar seção de gerenciamento de usuários
+        if self.app.email_logado == "admin":
+            self.usuarios_frame.pack(fill=tk.BOTH, expand=True, pady=(0, 20))
+            self.atualizar_lista()
+        else:
+            self.usuarios_frame.pack_forget()
     
     def esconder(self):
         """Esconde o frame da página inicial"""
         self.main_frame.pack_forget()
     
+    def atualizar_lista(self):
+        """Atualiza a lista de usuários"""
+        # Limpar itens existentes
+        for item in self.tree.get_children():
+            self.tree.delete(item)
+        
+        # Buscar usuários do banco de dados
+        usuarios = self.app.listar_usuarios()
+        
+        # Adicionar usuários à lista
+        for usuario in usuarios:
+            self.tree.insert("", tk.END, values=usuario)
+    
+    def excluir_usuario(self):
+        """Exclui o usuário selecionado"""
+        selecionado = self.tree.selection()
+        
+        if not selecionado:
+            messagebox.showwarning("Aviso", "Por favor, selecione um usuário para excluir!")
+            return
+        
+        # Obter dados do usuário selecionado
+        item = self.tree.item(selecionado[0])
+        valores = item['values']
+        email = valores[2]
+        nome = valores[1]
+        
+        # Confirmar exclusão
+        resposta = messagebox.askyesno(
+            "Confirmar Exclusão",
+            f"Deseja realmente excluir o usuário {nome} ({email})?"
+        )
+        
+        if resposta:
+            sucesso, mensagem = self.app.excluir_usuario(email)
+            if sucesso:
+                messagebox.showinfo("Sucesso", mensagem)
+                self.atualizar_lista()
+            else:
+                messagebox.showerror("Erro", mensagem)
+    
+    def cadastrar_usuario(self):
+        """Abre a tela de cadastro de usuário"""
+        # Criar janela de cadastro
+        cadastro_window = tk.Toplevel(self.app.root)
+        cadastro_window.title("Cadastrar Novo Usuário")
+        cadastro_window.geometry("450x400")
+        cadastro_window.resizable(False, False)
+        cadastro_window.transient(self.app.root)
+        cadastro_window.grab_set()
+        
+        # Centralizar janela
+        cadastro_window.update_idletasks()
+        width = cadastro_window.winfo_width()
+        height = cadastro_window.winfo_height()
+        x = (cadastro_window.winfo_screenwidth() // 2) - (width // 2)
+        y = (cadastro_window.winfo_screenheight() // 2) - (height // 2)
+        cadastro_window.geometry(f'{width}x{height}+{x}+{y}')
+        
+        # Frame principal
+        main_frame = ttk.Frame(cadastro_window, padding=20)
+        main_frame.pack(fill=tk.BOTH, expand=True)
+        
+        # Frame centralizado
+        center_frame = ttk.Frame(main_frame)
+        center_frame.place(relx=0.5, rely=0.5, anchor=tk.CENTER)
+        
+        # Título
+        title_label = ttk.Label(
+            center_frame,
+            text="Cadastrar Novo Usuário",
+            font=("Arial", 16, "bold")
+        )
+        title_label.grid(row=0, column=0, pady=(0, 25))
+        
+        # Campos de entrada
+        entry_frame = ttk.Frame(center_frame)
+        entry_frame.grid(row=1, column=0, pady=(0, 20))
+        
+        # Nome
+        nome_label = ttk.Label(entry_frame, text="Nome:", font=("Arial", 10))
+        nome_label.grid(row=0, column=0, sticky=tk.W, pady=(0, 5))
+        nome_entry = ttk.Entry(entry_frame, font=("Arial", 11), width=35)
+        nome_entry.grid(row=1, column=0, pady=(0, 15))
+        nome_entry.focus()
+        
+        # Email
+        email_label = ttk.Label(entry_frame, text="Email:", font=("Arial", 10))
+        email_label.grid(row=2, column=0, sticky=tk.W, pady=(0, 5))
+        email_entry = ttk.Entry(entry_frame, font=("Arial", 11), width=35)
+        email_entry.grid(row=3, column=0, pady=(0, 15))
+        
+        # Senha
+        senha_label = ttk.Label(entry_frame, text="Senha:", font=("Arial", 10))
+        senha_label.grid(row=4, column=0, sticky=tk.W, pady=(0, 5))
+        senha_entry = ttk.Entry(entry_frame, font=("Arial", 11), width=35, show="*")
+        senha_entry.grid(row=5, column=0, pady=(0, 20))
+        
+        def validar_email(email):
+            pattern = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+            return re.match(pattern, email) is not None
+        
+        def salvar():
+            nome = nome_entry.get().strip()
+            email = email_entry.get().strip()
+            senha = senha_entry.get()
+            
+            if not nome:
+                messagebox.showwarning("Aviso", "Por favor, digite o nome!")
+                nome_entry.focus()
+                return
+            
+            if not email:
+                messagebox.showwarning("Aviso", "Por favor, digite o email!")
+                email_entry.focus()
+                return
+            
+            if not validar_email(email):
+                messagebox.showerror("Erro", "Por favor, digite um email válido!")
+                email_entry.focus()
+                return
+            
+            if not senha:
+                messagebox.showwarning("Aviso", "Por favor, digite a senha!")
+                senha_entry.focus()
+                return
+            
+            if self.app.usuario_existe(email):
+                messagebox.showerror("Erro", "Este email já está cadastrado!")
+                email_entry.focus()
+                return
+            
+            if self.app.cadastrar_usuario(nome, email, senha):
+                messagebox.showinfo("Sucesso", "Usuário cadastrado com sucesso!")
+                cadastro_window.destroy()
+                self.atualizar_lista()
+            else:
+                messagebox.showerror("Erro", "Erro ao cadastrar usuário. Tente novamente.")
+        
+        # Botões
+        buttons_frame = ttk.Frame(center_frame)
+        buttons_frame.grid(row=2, column=0)
+        
+        salvar_btn = ttk.Button(buttons_frame, text="Salvar", command=salvar, width=15)
+        salvar_btn.grid(row=0, column=0, padx=(0, 10))
+        
+        cancelar_btn = ttk.Button(
+            buttons_frame, 
+            text="Cancelar", 
+            command=cadastro_window.destroy, 
+            width=15
+        )
+        cancelar_btn.grid(row=0, column=1)
+        
+        # Bind Enter
+        nome_entry.bind("<Return>", lambda e: email_entry.focus())
+        email_entry.bind("<Return>", lambda e: senha_entry.focus())
+        senha_entry.bind("<Return>", lambda e: salvar())
+    
     def sair(self):
-        """Encerra o aplicativo"""
-        self.app.root.quit()
-        self.app.root.destroy()
+        """Volta para a tela de login"""
+        self.app.mostrar_login()
 
 
 def main():
