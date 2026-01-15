@@ -1,54 +1,55 @@
-# Sistema de Gerenciamento de Tarefas
+# Sistema de Login e Gerenciamento de Tarefas
 
-## Descrição do Projeto
+Sistema de gerenciamento de tarefas com autenticação de usuários e quadro Kanban.
 
-Projeto desenvolvido como parte do trabalho da disciplina de Engenharia de Software, com o objetivo de aplicar na prática conceitos de metodologias ágeis, controle de versão e integração contínua utilizando a plataforma GitHub.
+## Funcionalidades
 
-O sistema consiste em uma aplicação para **gerenciamento de tarefas**, permitindo:
+- Sistema de login e cadastro de usuários
+- Autenticação de usuários
+- Gerenciamento de usuários (apenas admin)
+- Quadro Kanban para gerenciamento de tarefas
+- Priorização de tarefas
+- Diferentes níveis de acesso (admin e usuários normais)
 
-- Acompanhar o fluxo de trabalho em tempo real
-- Priorizar tarefas críticas
-- Monitorar o desempenho da equipe
-- Aplicar conceitos de Kanban na organização das atividades
+## Instalação
 
----
+O sistema utiliza Python 3 com as seguintes bibliotecas:
+- `tkinter` (geralmente incluído com Python)
+- `sqlite3` (incluído com Python)
 
-## Objetivo
+Para executar os testes, é necessário instalar o pytest:
 
-Desenvolver um sistema funcional que demonstre:
+```bash
+pip install pytest
+```
 
-- Uso prático de metodologias ágeis  
-- Organização de tarefas com Kanban  
-- Controle de versão com Git  
-- Automação de testes  
-- Integração contínua com GitHub Actions  
+Ou usando o arquivo requirements.txt:
 
----
+```bash
+pip install -r requirements.txt
+```
 
-## Escopo Inicial
+## Execução
 
-O escopo inicial do projeto contempla:
+Para executar o sistema:
 
-- Sistema de autenticação (login)
-- Feature adicional: User admin visualizar quadro kanban de outros usuarios
-- CRUD de tarefas:
-  - Criar
-  - Listar
-  - Editar
-  - Excluir tarefas
-- Interface simples
-- Quadro Kanban no GitHub Projects
-- Testes automatizados
-- Pipeline de CI
+```bash
+python3 login.py
+```
 
----
+Para executar os testes:
 
-## Tecnologias Utilizadas
+```bash
+pytest test_login.py -v
+```
 
-- **Python**
-- **Flask**
-- **SQLite**
-- **Pytest**
-- **Git**
-- **GitHub**
-- **GitHub Actions**
+## Estrutura
+
+- `login.py`: Código principal da aplicação
+- `test_login.py`: Testes unitários usando pytest
+- `users.db`: Banco de dados SQLite (criado automaticamente)
+- `requirements.txt`: Dependências do projeto
+
+## Credenciais padrão- **Admin**: 
+  - Email: `admin`
+  - Senha: `admin`
