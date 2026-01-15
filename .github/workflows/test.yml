@@ -43,4 +43,4 @@ jobs:
       env:
         DISPLAY: :99
       run: |
-        pytest test_login.py -v --tb=short
+        pytest tests/ -v --tb=short

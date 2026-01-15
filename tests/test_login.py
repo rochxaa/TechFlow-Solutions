@@ -9,9 +9,9 @@ import tkinter as tk
 from datetime import datetime
 import sys
 
-# Adicionar o diretório atual ao path para importar o módulo login
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from login import App
+# Adicionar o diretório raiz ao path para importar o módulo login de src
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), '..'))
+from src.login import App
 
 
 @pytest.fixture
