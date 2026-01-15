@@ -31,8 +31,13 @@ def temp_db():
 @pytest.fixture
 def mock_root():
     """Cria uma janela root mock para os testes"""
-    root = tk.Tcl()  # NÃO cria interface gráfica
+    # Configurar variável de ambiente para evitar erros em ambiente headless
+    os.environ['DISPLAY'] = os.environ.get('DISPLAY', ':99')
+    
+    root = tk.Tk()
+    root.withdraw()  # Esconder a janela
     yield root
+    root.destroy()
 
 
 @pytest.fixture
