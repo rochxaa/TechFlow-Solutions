@@ -31,10 +31,8 @@ def temp_db():
 @pytest.fixture
 def mock_root():
     """Cria uma janela root mock para os testes"""
-    root = tk.Tk()
-    root.withdraw()  # Esconder a janela
+    root = tk.Tcl()  # NÃO cria interface gráfica
     yield root
-    root.destroy()
 
 
 @pytest.fixture
